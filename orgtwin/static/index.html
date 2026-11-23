@@ -1,0 +1,74 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OrgTwin</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#eceff4;--p:#fff;--ink:#1d2433;--mut:#5b6578;--ln:#d6dbe6;--ac:#4455c8;--acb:#e6e9fa;--bad:#c62f4a;--badb:#fbe5ea;--wr:#a8670b;--wrb:#fdf0d8;--ok:#2b8a5e;--okb:#def3e8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans Arabic",system-ui,sans-serif}
+header{background:var(--ink);color:#fff;padding:10px 20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}header h1{margin:0;font-size:17px}
+.sp{flex:1}.pill{font-size:12px;padding:2px 10px;border-radius:99px;background:#ffffff26}.pill.ok{background:var(--ok)}.pill.bad{background:var(--bad)}
+nav{display:flex;gap:4px;padding:10px 20px 0;max-width:1240px;margin:auto}nav button{border:0;background:none;padding:8px 14px;color:var(--mut);border-bottom:2px solid transparent;font:inherit;cursor:pointer}nav button[aria-selected=true]{color:var(--ink);border-color:var(--ac);font-weight:600}
+main{max-width:1240px;margin:auto;padding:14px 20px 30px}.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px}@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--p);border:1px solid var(--ln);border-radius:10px;padding:14px 16px;margin-bottom:14px}.card h3{margin:0 0 8px;font-size:15px}
+.hint,.kv{font-size:13px;color:var(--mut)}code{font-size:12px;color:var(--mut);word-break:break-all}
+button.b,select,input{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--ln);background:#fff;color:var(--ink)}button.b{cursor:pointer}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+svg text{font-size:11px;fill:var(--ink)}svg .n{cursor:pointer}svg .n rect{stroke:var(--ln);fill:#fff}svg .n.sel rect{stroke:var(--ink);stroke-width:2}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.bar{height:6px;border-radius:3px;background:var(--bad);display:inline-block;vertical-align:middle}
+.ev{border:1px solid var(--ln);border-radius:8px;padding:8px 12px;margin-bottom:8px}.ev.root{border-color:var(--bad);background:var(--badb)}.ev.viol{border-color:var(--wr);background:var(--wrb)}
+.ev.blocked{border-color:var(--ok);background:var(--okb)}.ev.not_executed{opacity:.45}
+.tag{font-size:11px;padding:1px 8px;border-radius:99px;margin-left:6px;background:var(--acb);color:var(--ac)}.tag.bad{background:var(--bad);color:#fff}.tag.wr{background:var(--wr);color:#fff}.tag.ok{background:var(--ok);color:#fff}
+.banner{background:var(--badb);border:1px solid var(--bad);border-radius:10px;padding:12px 16px;margin-bottom:14px}
+label.c{display:block;padding:6px 0;font-size:14px}.err{color:var(--bad)}
+</style></head><body>
+<header><h1>OrgTwin</h1><span class="hint" style="color:#a9b3c9">Organisation map · decision memory · incident black box</span><span class="sp"></span><span class="pill" id="chain">chain …</span></header>
+<nav id="nav"><button data-t="map" aria-selected="true">Impact map</button><button data-t="inc" aria-selected="false">Incident</button><button data-t="ask" aria-selected="false">Ask</button></nav>
+<main id="m"></main>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const J=async(u,b)=>{const r=await fetch(u,b===undefined?{}:{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b)});const j=await r.json();if(!r.ok)throw new Error(typeof j.detail==="string"?j.detail:"request failed");return j};
+const egp=n=>"EGP "+Math.round(n).toLocaleString();let tab="map",G,sel=null,sim=null,trace="INC-2026-001",rep=null,rp=null;
+const COL={data:0,human:0,system:1,agent:2,process:3,policy:4},LBL=["Data & people","Systems","Agents","Processes","Policies"];
+async function chain(){const v=await J("/api/audit/verify");const e=$("#chain");e.textContent=v.ok?`audit chain intact · ${v.events} events`:`CHAIN BROKEN at ${v.broken_at}`;e.className="pill "+(v.ok?"ok":"bad")}
+$("#nav").onclick=e=>{const b=e.target.closest("button");if(!b)return;tab=b.dataset.t;document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected",x===b));draw()};
+function pos(){const rows={},p={};G.nodes.forEach(n=>{const c=COL[n.type];rows[c]=(rows[c]||0);p[n.id]={x:20+c*172,y:34+rows[c]++*58}});return p}
+function map(){const P=pos(),hot=Object.fromEntries((sim?.impacted||[]).map(i=>[i.id,i.exposure]));
+ const edges=G.edges.map(e=>{const a=P[e.from],b=P[e.to];return`<line x1="${a.x}" y1="${a.y+16}" x2="${b.x+130}" y2="${b.y+16}" stroke="#aab2c5" stroke-width="${.5+e.weight*1.5}" opacity=".55"/>`}).join("");
+ const nodes=G.nodes.map(n=>{const p=P[n.id],h=hot[n.id];const f=n.id===sel?"#e6e9fa":h?`rgba(198,47,74,${.15+Math.min(.7,h)})`:"#fff";
+  return`<g class="n ${n.id===sel?"sel":""}" data-id="${n.id}" tabindex="0"><rect x="${p.x}" y="${p.y}" width="130" height="32" rx="6" style="fill:${f}"/><text x="${p.x+8}" y="${p.y+20}">${esc(n.name.slice(0,22))}</text></g>`}).join("");
+ const heads=LBL.map((l,i)=>`<text x="${20+i*172}" y="16" style="fill:#5b6578">${l}</text>`).join("");
+ return`<div class="grid"><div class="card"><div class="row"><b>Change</b><select id="chg">${["degrade","delay","relax","remove"].map(c=>`<option ${sim&&sim.change===c?"selected":""}>${c}</option>`).join("")}</select><span class="hint">${sel?"on “"+esc(G.nodes.find(n=>n.id===sel).name)+"”":"click a node, then pick the change"}</span></div>
+ <svg viewBox="0 0 880 340" width="100%" role="img" aria-label="Dependency map">${heads}${edges}${nodes}</svg><div class="hint">An arrow points from a thing to what it depends on. Red = exposed if the selected node changes.</div></div>
+ <div>${sim?simPanel(sim):'<div class="card hint">Pick a node (for example “Invoice OCR service”) to see who is exposed, which past decisions relied on it, and whether it already appeared in an incident.</div>'}</div></div>`}
+function simPanel(s){return`<div class="card"><h3>${esc(s.change)}: ${esc(s.name)}</h3>${s.impacted.length?s.impacted.map(i=>`<div style="margin-bottom:8px"><span class="bar" style="width:${Math.max(6,i.exposure*120)}px"></span> <b>${esc(i.name)}</b> <span class="hint">${i.exposure}</span><br><span class="kv">${i.path.map(p=>esc(G.nodes.find(n=>n.id===p).name)).join(" → ")}</span></div>`).join(""):'<span class="hint">Nothing depends on this.</span>'}</div>
+ ${s.relied_on_by.length?`<div class="card"><h3>Decisions that assumed this stays as is</h3>${s.relied_on_by.map(d=>`<div><b>${d.id}</b> ${esc(d.title)} <span class="hint">${d.date}</span></div>`).join("")}</div>`:""}
+ ${s.related_decisions.length?`<div class="card"><h3>Related decisions</h3>${s.related_decisions.map(d=>`<div><b>${d.id}</b> ${esc(d.title)}</div>`).join("")}</div>`:""}
+ ${s.seen_in_incidents.length?`<div class="card" style="border-color:var(--bad)"><h3>Already seen in incidents</h3>${s.seen_in_incidents.map(t=>`<button class="b" data-trace="${t}">${t}</button> `).join("")}</div>`:""}`}
+async function runSim(){if(!sel)return;sim=await J("/api/simulate",{node:sel,change:$("#chg")?.value||"degrade"});draw()}
+async function inc(){const list=await J("/api/incidents");rep=await J("/api/incidents/"+trace);const r=rep,rc=r.root_cause,ids=new Set((rp?Object.keys(rp.status):[]));
+ const vio=new Set(r.violations.map(v=>v.event)),sk=new Set(r.skipped_barriers.map(s=>s.event));
+ return`<div class="row">${list.map(i=>`<button class="b ${i.trace===trace?"p":""}" data-trace="${i.trace}">${i.trace}${i.root_cause?" · "+egp(i.loss)+" lost":" · clean"}</button>`).join("")}<span class="sp"></span><button class="b" id="tam">Tamper with the evidence</button><button class="b" id="rst">Reset</button></div>
+ ${rc?`<div class="banner"><b>Root cause: ${rc.event.split("-").pop()}</b> · ${esc(rc.why)}<br><span class="kv">${esc(r.narrative.text)}</span> <span class="tag">${esc(r.narrative.source)}</span></div>`:`<div class="card">${esc(r.narrative.text)}</div>`}
+ <div class="grid"><div><div class="card"><h3>Reconstructed timeline</h3>${r.timeline.map(e=>{const st=rp?.status[e.id],cls=st==="blocked"?"blocked":st==="not_executed"?"not_executed":rc&&e.id===rc.event?"root":vio.has(e.id)?"viol":"";
+  return`<div class="ev ${cls}"><b>${e.id.split("-").pop()}</b> ${esc(e.action)} <span class="hint">by ${esc(e.actor)} (${e.type}) · ${e.at.slice(5)}</span>${rc&&e.id===rc.event?'<span class="tag bad">error begins</span>':""}${vio.has(e.id)?'<span class="tag wr">control violated</span>':""}${sk.has(e.id)?'<span class="tag wr">barrier skipped</span>':""}${st?`<span class="tag ${st==="blocked"?"ok":""}">${st.replace("_"," ")}</span>`:""}
+  <br><code>in ${esc(JSON.stringify(e.inputs))} → out ${esc(JSON.stringify(e.outputs))}${e.permission?" · permission "+esc(e.permission):""}${e.parent?" · caused by "+e.parent.split("-").pop():""}</code></div>`}).join("")}</div></div>
+ <div>${rc?`<div class="card"><h3>Test a fix by replay</h3>${r.recommendations.map(x=>`<label class="c"><input type="checkbox" name="k" value="${x.control}"> <b>${x.control}</b> ${esc(x.name)}<br><span class="hint">alone: ${x.prevented?"stops it at "+x.blocks_at.split("-").pop():"does not stop it"}</span></label>`).join("")}
+  <button class="b p" id="rpl">Replay with selected</button>${rp?`<p><b>${rp.prevented?"Prevented":"Not prevented"}</b>${rp.prevented?" · "+egp(rp.loss_avoided)+" avoided":""}</p>`:""}<p class="hint">Replay re-runs the recorded events with the new control. It does not predict what people would do instead.</p></div>
+  <div class="card"><h3>Decisions behind it</h3>${r.decisions.map(d=>`<div><b>${d.id}</b> ${esc(d.title)}</div>`).join("")}</div>
+  <div class="card"><h3>Also exposed through ${esc(rc.event.split("-").pop())}</h3>${r.blast_radius.map(b=>`<div class="kv">${esc(b.name)} · ${b.exposure}</div>`).join("")}</div>`:""}
+  <div class="card"><h3>Who, what data, which permission</h3><div class="kv">Started by <b>${esc(r.originator.actor)}</b> (${r.originator.type}) at ${r.originator.at}</div>${r.permissions_used.map(p=>`<div class="kv">${esc(p.actor)} used <b>${esc(p.permission)}</b></div>`).join("")}<div class="kv">Hash chain: ${r.chain.ok?"intact":"BROKEN at "+r.chain.broken_at}</div></div></div></div>`}
+function askView(){return`<div class="card"><div class="row"><input id="q" style="flex:1;min-width:260px" dir="auto" placeholder="What if we disable the payment approval policy?"><button class="b p" id="go">Ask</button></div>
+ <div class="row">${["What if we upgrade the invoice OCR service?","لو وقفنا Bank API","What happened in the failed payment?","Why do we skip PO matching?"].map(x=>`<button class="b" data-q="${esc(x)}">${esc(x)}</button>`).join("")}</div></div><div id="ans"></div>`}
+async function ask(q){const a=await J("/api/ask",{q});let h="";
+ if(a.type==="simulation"){sim=a;h=simPanel(a)}else if(a.type==="incident"){const r=a.report;h=`<div class="card"><h3>${r.trace}</h3>${esc(r.root_cause.why)} at ${r.root_cause.event.split("-").pop()}. Loss ${egp(r.loss)}. <button class="b" data-trace="${r.trace}">Open incident</button></div>`}
+ else h=`<div class="card">${esc(a.answer)}${(a.sources||[]).map(s=>`<div class="hint">${s.id} · ${esc(s.title)} · ${s.date}</div>`).join("")}</div>`;$("#ans").innerHTML=h}
+async function draw(){const m=$("#m");try{if(tab==="map")m.innerHTML=map();else if(tab==="inc")m.innerHTML=await inc();else{m.innerHTML=askView()}}catch(e){m.innerHTML=`<div class="card err">${esc(e.message)}</div>`}chain()}
+$("#m").onclick=async e=>{const t=e.target.closest("[data-trace]"),n=e.target.closest(".n"),q=e.target.closest("[data-q]");
+ if(t){trace=t.dataset.trace;rp=null;tab="inc";document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected",x.dataset.t==="inc"));return draw()}
+ if(n){sel=n.dataset.id;return runSim()}if(q){$("#q").value=q.dataset.q;return ask(q.dataset.q)}
+ if(e.target.id==="go")return ask($("#q").value);
+ if(e.target.id==="tam"){await J("/api/demo/tamper",{});return draw()}if(e.target.id==="rst"){await J("/api/demo/reset",{});rp=null;return draw()}
+ if(e.target.id==="rpl"){const c=[...document.querySelectorAll("input[name=k]:checked")].map(x=>x.value);if(!c.length)return;rp=await J(`/api/incidents/${trace}/replay`,{controls:c});return draw()}};
+$("#m").onchange=e=>{if(e.target.id==="chg")runSim()};
+(async()=>{G=await J("/api/graph");draw()})();
+</script></body></html>
