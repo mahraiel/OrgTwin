@@ -45,7 +45,7 @@ class Graph:
 
     def find(self, text):
         """Best node for a free-text mention (token overlap on name/id)."""
-        toks = set(re.findall(r"\\w+", text.lower()))
-        score = lambda n: len(toks & set(re.findall(r"\\w+", (n["name"] + " " + n["id"].replace(":", " ")).lower())))
+        toks = set(re.findall(r"\w+", text.lower()))
+        score = lambda n: len(toks & set(re.findall(r"\w+", (n["name"] + " " + n["id"].replace(":", " ")).lower())))
         best = max(self.nodes.values(), key=score)
         return best["id"] if score(best) else None
